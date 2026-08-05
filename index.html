@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>告警看板</title>
+<style>
+:root{
+  --bg:#0f172a; --card:#1e293b; --card2:#273449; --border:#334155;
+  --text:#e2e8f0; --muted:#94a3b8; --accent:#3b82f6;
+  --red:#ef4444; --green:#22c55e; --yellow:#eab308; --info:#38bdf8;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.wrap{max-width:1400px;margin:0 auto;padding:20px}
+
+/* header */
+.header{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.header h1{font-size:22px;font-weight:700;display:flex;align-items:center;gap:10px}
+.header .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+.status-chip{background:var(--card);border:1px solid var(--border);padding:6px 12px;border-radius:20px;font-size:13px;color:var(--muted);white-space:nowrap}
+.status-chip b{color:var(--text)}
+.ml-auto{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{background:var(--accent);border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;transition:.2s;white-space:nowrap}
+.btn:hover{filter:brightness(1.1)}
+.btn.ghost{background:var(--card2);border:1px solid var(--border);color:var(--text)}
+.btn.danger{background:rgba(239,68,68,.15);border:1px solid var(--red);color:var(--red)}
+.btn.danger:hover{background:var(--red);color:#fff}
+.search{background:var(--card2);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:20px;font-size:13px;width:200px;outline:none}
+.search:focus{border-color:var(--accent)}
+.refresh{color:var(--muted);font-size:12px}
+.filter-hint{color:var(--muted);font-size:12px;margin:-8px 0 12px}
+
+/* summary cards */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin-bottom:20px}
+.scard{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px}
+.scard .num{font-size:30px;font-weight:800;margin-top:6px}
+.scard .label{color:var(--muted);font-size:13px}
+.scard.red .num{color:var(--red)}
+.scard.yellow .num{color:var(--yellow)}
+.scard.green .num{color:var(--green)}
+.scard.blue .num{color:var(--info)}
+
+/* group cards */
+.group-card{background:var(--card);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden}
+.group-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;background:var(--card2)}
+.group-head:hover{background:#2c3a52}
+.group-title{font-size:16px;font-weight:700;display:flex;align-items:center;gap:10px}
+.badge{font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600}
+.badge.crit{background:rgba(239,68,68,.15);color:var(--red)}
+.badge.warn{background:rgba(234,179,8,.15);color:var(--yellow)}
+.badge.total{background:rgba(148,163,184,.15);color:var(--muted)}
+.group-meta{margin-left:auto;display:flex;gap:14px;align-items:center;color:var(--muted);font-size:13px}
+.arrow{transition:.3s;font-size:11px}
+.group-card.open .group-head .arrow{transform:rotate(180deg)}
+.group-card.open .alert-list{display:block}
+.group-card:not(.open) .alert-list{display:none}
+
+/* alert list */
+.alert-list{padding:10px 16px 16px}
+.alert-item{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.alert-item:hover{border-color:var(--accent)}
+.alert-item.sev-critical{border-left:4px solid var(--red)}
+.alert-item.sev-warning{border-left:4px solid var(--yellow)}
+.alert-item.sev-info{border-left:4px solid var(--info)}
+.alert-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.item-head{padding:12px 14px;cursor:pointer;user-select:none}
+.item-head:hover{background:rgba(59,130,246,.07)}
+.alert-item.open .item-head{border-bottom:1px solid var(--border)}
+.alert-item.open .item-head .arrow{transform:rotate(180deg)}
+.sev-badge{font-size:11px;padding:2px 9px;border-radius:10px;font-weight:700;white-space:nowrap}
+.sev-badge.critical{background:rgba(239,68,68,.15);color:var(--red)}
+.sev-badge.warning{background:rgba(234,179,8,.15);color:var(--yellow)}
+.sev-badge.info{background:rgba(56,189,248,.15);color:var(--info)}
+.count-tag{background:var(--card2);border:1px solid var(--border);color:var(--muted);font-size:12px;padding:1px 8px;border-radius:10px}
+.alert-summary{color:var(--text);font-size:14px;flex:1;min-width:160px}
+.alert-time{color:var(--muted);font-size:12px;white-space:nowrap}
+.alert-instance{font-family:monospace;font-size:13px;cursor:pointer;color:var(--accent)}
+.alert-instance:hover{text-decoration:underline}
+.instance-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;margin-top:8px;background:var(--card2);border:1px solid var(--border);border-radius:8px}
+.alert-actions{display:flex;gap:8px;margin-left:auto}
+.alert-actions button{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:4px 9px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap}
+.alert-actions button:hover{color:#fff;border-color:var(--accent)}
+.alert-actions button.ack.done{color:var(--green);border-color:var(--green)}
+.ack-tag{background:rgba(34,197,94,.15);color:var(--green);padding:2px 8px;border-radius:6px;font-size:11px;white-space:nowrap}
+.ack-tag.sil{background:rgba(148,163,184,.15);color:#fbbf24}
+.ack-tag.inh{background:rgba(148,163,184,.15);color:var(--info)}
+
+/* empty */
+.empty{text-align:center;padding:60px;color:var(--muted)}
+.empty .big{font-size:48px;margin-bottom:12px}
+
+/* modal */
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;justify-content:center;align-items:center}
+.modal.show{display:flex}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;width:560px;max-width:94vw;max-height:88vh;overflow:auto;padding:22px}
+.modal-box.wide{width:720px}
+.modal-box h3{margin-bottom:14px;font-size:17px;display:flex;align-items:center;gap:10px;justify-content:space-between}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:8px;font-size:14px}
+.field .row{display:flex;gap:10px;align-items:center}
+.field .row input[type=checkbox]{width:auto}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+.kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;gap:16px}
+.kv span:first-child{color:var(--muted);flex-shrink:0}
+.kv span:last-child{word-break:break-all;text-align:right}
+.kv a{color:var(--accent)}
+.detail-body{margin-top:12px}
+.detail-section{font-size:13px;color:var(--muted);margin:14px 0 6px}
+
+/* list rows (silence / history) */
+.sil-row,.hist-row{display:flex;align-items:center;gap:14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--card2);flex-wrap:wrap}
+.sil-row .main{flex:1;min-width:180px}
+.sil-row .time{color:var(--muted);font-size:12px;text-align:right;min-width:130px}
+.hist-row .main{flex:1;min-width:160px}
+.small{font-size:12px}
+.muted{color:var(--muted)}
+.list-scroll{max-height:52vh;overflow:auto}
+
+/* toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:12px 22px;border-radius:10px;font-size:14px;display:none;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.3)}
+#toast.error{background:#dc2626}
+@media(max-width:760px){.group-meta{display:none}.alert-time{display:none}.search{width:100%}.ml-auto{margin-left:0;width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1><span class="dot"></span>告警看板 <span class="status-chip" id="apiStatus">连接中...</span></h1>
+    <span class="status-chip" id="totalChip">告警 <b>0</b></span>
+    <span class="status-chip" id="silencedChip">已静默 <b>0</b></span>
+    <div class="ml-auto">
+      <input class="search" id="search" placeholder="🔍 搜索 告警名/实例/分组..." autocomplete="off">
+      <button class="btn ghost" id="notifBtn" onclick="toggleNotif()">🔕 通知</button>
+      <button class="btn ghost" onclick="openHistory()">🕘 已恢复</button>
+      <button class="btn ghost" onclick="openSilenceManage()">🔕 静默管理</button>
+      <span class="refresh" id="lastRefresh"></span>
+      <button class="btn ghost" onclick="toggleAuto()" id="autoBtn">⏸ 暂停</button>
+      <button class="btn ghost" onclick="refresh()">🔄 刷新</button>
+      <button class="btn" onclick="openSilenceModal()">➕ 新建静默</button>
+    </div>
+  </div>
+
+  <div class="filter-hint" id="filterHint"></div>
+  <div class="summary" id="summary"></div>
+  <div id="groups"></div>
+  <div class="empty" id="empty" style="display:none"><div class="big">🎉</div>当前无告警，一切正常</div>
+</div>
+
+<!-- 新建静默 -->
+<div class="modal" id="silenceModal">
+  <div class="modal-box">
+    <h3>🔕 新建静默 (Silence)</h3>
+    <div class="field"><label>匹配分组 (group)</label>
+      <select id="sGroup"></select>
+    </div>
+    <div class="field"><label>告警类型 (alertname, 可选)</label>
+      <input id="sAlertname" placeholder="如 PortDown / HostDown, 留空=该分组全部">
+      <div class="row" style="margin-top:8px"><input type="checkbox" id="sRegex"><label for="sRegex" style="margin:0">按正则匹配 (不勾选为精确匹配)</label></div>
+    </div>
+    <div class="field"><label>时长</label>
+      <select id="sDur">
+        <option value="3600">1 小时</option><option value="10800">3 小时</option>
+        <option value="21600">6 小时</option><option value="43200">12 小时</option>
+        <option value="86400">1 天</option><option value="604800">7 天</option>
+      </select>
+    </div>
+    <div class="field"><label>备注</label><input id="sComment" placeholder="原因，如: 发版维护中"></div>
+    <div class="field"><label>创建人</label><input id="sCreator" value="admin"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal()">取消</button>
+      <button class="btn" onclick="submitSilence()">创建静默</button>
+    </div>
+  </div>
+</div>
+
+<!-- 静默管理 -->
+<div class="modal" id="silenceManageModal">
+  <div class="modal-box wide">
+    <h3>🔕 静默管理 <button class="btn ghost" onclick="loadSilences()">🔄 刷新</button></h3>
+    <div class="list-scroll" id="silenceList"><div class="empty">加载中...</div></div>
+    <div class="modal-actions"><button class="btn ghost" onclick="closeModal()">关闭</button></div>
+  </div>
+</div>
+
+<!-- 已恢复历史 -->
+<div class="modal" id="historyModal">
+  <div class="modal-box wide">
+    <h3>🕘 已恢复告警 <button class="btn ghost" onclick="loadHistory()">🔄 刷新</button></h3>
+    <div class="list-scroll" id="historyList"><div class="empty">加载中...</div></div>
+    <div class="modal-actions"><button class="btn ghost" onclick="closeModal()">关闭</button></div>
+  </div>
+</div>
+
+<!-- 详情 -->
+<div class="modal" id="detailModal">
+  <div class="modal-box">
+    <h3>📋 告警详情</h3>
+    <div class="detail-body" id="detailBody"></div>
+    <div class="modal-actions"><button class="btn ghost" onclick="closeModal()">关闭</button></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let autoRefresh = true;
+let timer = null;
+let currentData = null;
+const groupCollapsed = new Set();
+const itemCollapsed = new Set();
+let itemsInitialized = false;
+let notifEnabled = false;
+let prevCrit = new Set();
+let critInit = false;
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  let d = {};
+  try{ d = await r.json(); }catch(e){}
+  if(!r.ok){ d.error = true; d.status = r.status; if(!d.message) d.message = 'HTTP '+r.status; }
+  return d;
+}
+function toast(msg, err){ const t=document.getElementById('toast'); t.textContent=msg; t.className=err?'error':''; t.style.display='block'; setTimeout(()=>t.style.display='none',3000); }
+function sevLabel(s){ return s==='critical'?'critical':s==='warning'?'warning':'info'; }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function safeUrl(u){ try{ const p=new URL(u); return (p.protocol==='http:'||p.protocol==='https:')?u:''; }catch(e){ return ''; } }
+
+/* ---------- 数据与渲染 ---------- */
+async function refresh(){
+  try{
+    const data = await api('/api/alerts');
+    if(data.error){
+      document.getElementById('apiStatus').textContent='✗ 监控暂不可用';
+      document.getElementById('apiStatus').style.color='#ef4444';
+      document.getElementById('totalChip').innerHTML='告警 <b>-</b>';
+      document.getElementById('silencedChip').innerHTML='已静默 <b>-</b>';
+      render({total:0, silenced:0, groups:[]}, {error:true});
+      document.getElementById('empty').style.display='block';
+      document.getElementById('empty').innerHTML='<div class="big">⚠️</div>监控数据暂不可用（Alertmanager 连接异常）';
+      return;
+    }
+    document.getElementById('apiStatus').textContent='● 已连接';
+    document.getElementById('apiStatus').style.color='#22c55e';
+    currentData = data;
+    checkNewCriticals(data);
+    render(data);
+    document.getElementById('lastRefresh').textContent='更新于 '+new Date().toLocaleTimeString();
+  }catch(e){
+    document.getElementById('apiStatus').textContent='✗ 连接失败';
+    document.getElementById('apiStatus').style.color='#ef4444';
+    document.getElementById('empty').style.display='block';
+    document.getElementById('empty').innerHTML='<div class="big">⚠️</div>连接监控服务失败';
+  }
+}
+
+function filterData(data, q){
+  if(!q) return data;
+  const groups = [];
+  for(const g of data.groups){
+    const items = [];
+    for(const it of g.items){
+      const alerts = it.alerts.filter(a=>{
+        const lbl=a.labels||{}, ann=a.annotations||{};
+        return [lbl.instance, lbl.alertname, lbl.group, it.alertname, ann.summary]
+          .some(v=>String(v||'').toLowerCase().includes(q));
+      });
+      if(alerts.length) items.push({...it, alerts, count: alerts.length});
+    }
+    if(items.length){
+      const crit=items.reduce((s,i)=>s+(i.severity==='critical'?i.count:0),0);
+      const warn=items.reduce((s,i)=>s+(i.severity==='warning'?i.count:0),0);
+      const info=items.reduce((s,i)=>s+(i.severity!=='critical'&&i.severity!=='warning'?i.count:0),0);
+      groups.push({...g, items, count: items.reduce((s,i)=>s+i.count,0), critical:crit, warning:warn, info:info});
+    }
+  }
+  return {total: groups.reduce((s,g)=>s+g.count,0), silenced:data.silenced, groups};
+}
+
+function initCollapseDefaults(data){
+  if(itemsInitialized) return;
+  data.groups.forEach(g=>g.items.forEach(it=>{
+    if(it.count>8) itemCollapsed.add(g.group+'|'+it.alertname+'|'+it.severity);
+  }));
+  itemsInitialized=true;
+}
+
+function render(data, opts){
+  opts = opts||{};
+  if(!data) return;
+  const q=(document.getElementById('search').value||'').trim().toLowerCase();
+  const view = q ? filterData(data, q) : data;
+  initCollapseDefaults(data);
+
+  document.getElementById('totalChip').innerHTML='告警 <b>'+view.total+'</b>';
+  document.getElementById('silencedChip').innerHTML='已静默 <b>'+(view.silenced||0)+'</b>';
+  const sum = document.getElementById('summary');
+  if(opts.error){ sum.innerHTML=''; document.getElementById('groups').innerHTML=''; return; }
+  let crit=0,warn=0,info=0,grps=view.groups.length;
+  view.groups.forEach(g=>{crit+=g.critical; warn+=g.warning; info+=g.info;});
+  sum.innerHTML=`
+    <div class="scard red"><div class="label">严重告警 (critical)</div><div class="num">${crit}</div></div>
+    <div class="scard yellow"><div class="label">警告 (warning)</div><div class="num">${warn}</div></div>
+    <div class="scard blue"><div class="label">提示 (info)</div><div class="num">${info}</div></div>
+    <div class="scard green"><div class="label">服务分组</div><div class="num">${grps}</div></div>`;
+
+  const gEl=document.getElementById('groups');
+  const emptyEl=document.getElementById('empty');
+  const hint=document.getElementById('filterHint');
+  if(view.total===0){
+    gEl.innerHTML='';
+    emptyEl.style.display='block';
+    emptyEl.innerHTML = q
+      ? '<div class="big">🔍</div>没有匹配的告警'
+      : '<div class="big">🎉</div>当前无告警，一切正常';
+    hint.textContent = q ? `搜索 "${q}" 无结果（共 ${data.total} 条告警）` : '';
+    return;
+  }
+  emptyEl.style.display='none';
+  gEl.innerHTML = view.groups.map(groupHTML).join('');
+  hint.textContent = q ? `搜索 "${q}"：匹配 ${view.total} / ${data.total} 条` : '';
+}
+
+function groupHTML(grp){
+  const open=!groupCollapsed.has(grp.group);
+  return `
+  <div class="group-card ${open?'open':''}" data-group="${esc(grp.group)}">
+    <div class="group-head" onclick="toggleGroup(this)">
+      <span class="group-title">📁 ${esc(grp.group)}</span>
+      <span class="badge crit">${grp.critical} 严重</span>
+      <span class="badge warn">${grp.warning} 警告</span>
+      <span class="badge total">${grp.count} 条</span>
+      <span class="group-meta"><span class="arrow">▼</span></span>
+    </div>
+    <div class="alert-list">${grp.items.map(it=>itemHTML(grp.group, it)).join('')}</div>
+  </div>`;
+}
+
+function itemHTML(grpName, it){
+  const sev=sevLabel(it.severity);
+  const ikey=grpName+'|'+it.alertname+'|'+it.severity;
+  const open=!itemCollapsed.has(ikey);
+  const first=it.alerts[0]||{};
+  const summary=(first.annotations||{}).summary||'';
+  const time=first.startsAt?new Date(first.startsAt).toLocaleString():'';
+  return `
+  <div class="alert-item sev-${sev} ${open?'open':''}">
+    <div class="alert-row item-head" data-ikey="${esc(ikey)}" onclick="toggleItem(this)">
+      <span class="sev-badge ${sev}">${sev.toUpperCase()}</span>
+      <span class="alert-summary"><b>${esc(it.alertname)}</b> <span class="count-tag">× ${it.count}</span>${summary?' — '+esc(summary):''}</span>
+      <span class="alert-time">${time}</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="item-body">
+      ${it.alerts.map(instanceHTML).join('')}
+    </div>
+  </div>`;
+}
+
+function instanceHTML(a){
+  const lbl=a.labels||{}, ann=a.annotations||{};
+  const sev=sevLabel(lbl.severity);
+  const time=a.startsAt?new Date(a.startsAt).toLocaleString():'';
+  const ack=a.ack?`<span class="ack-tag">✓ ${esc(a.ack.ack_by)} 已确认</span>`:'';
+  const sil=(a.status&&a.status.silencedBy&&a.status.silencedBy.length)?'<span class="ack-tag sil">🔕 已静默</span>':'';
+  const inh=(a.status&&a.status.inhibitedBy&&a.status.inhibitedBy.length)?'<span class="ack-tag inh">🚫 已抑制</span>':'';
+  return `
+  <div class="instance-row">
+    <span class="alert-instance" data-action="detail" data-fp="${esc(a.fingerprint)}" title="点击看详情">${esc(lbl.instance||'(无实例)')}</span>
+    <span class="alert-summary">${esc(ann.summary||'')}</span>
+    ${sil}${inh}${ack}
+    <span class="alert-time">${time}</span>
+    <span class="alert-actions">
+      <button data-action="detail" data-fp="${esc(a.fingerprint)}">📋 详情</button>
+      <button class="ack ${a.ack?'done':''}" data-action="ack" data-fp="${esc(a.fingerprint)}">${a.ack?'取消确认':'✓ 确认'}</button>
+      <button data-action="silence" data-group="${esc(lbl.group||'')}" data-alertname="${esc(lbl.alertname||'')}">🔕 静默</button>
+    </span>
+  </div>`;
+}
+
+/* ---------- 交互 ---------- */
+function toggleGroup(el){
+  const card=el.closest('.group-card');
+  const key=card.dataset.group;
+  card.classList.toggle('open');
+  if(card.classList.contains('open')) groupCollapsed.delete(key); else groupCollapsed.add(key);
+}
+function toggleItem(el){
+  const item=el.closest('.alert-item');
+  const key=el.dataset.ikey;
+  item.classList.toggle('open');
+  if(item.classList.contains('open')) itemCollapsed.delete(key); else itemCollapsed.add(key);
+}
+
+document.addEventListener('click', e=>{
+  const el=e.target.closest('[data-action]');
+  if(!el) return;
+  const act=el.dataset.action;
+  if(act==='detail') showDetail(el.dataset.fp);
+  else if(act==='ack') toggleAck(el.dataset.fp);
+  else if(act==='silence') openSilenceFor(el.dataset.group, el.dataset.alertname);
+  else if(act==='del-silence') deleteSilence(el.dataset.id);
+});
+
+async function showDetail(fp){
+  try{
+    const a = await api('/api/alert/'+fp);
+    if(a.error) throw new Error(a.message);
+    const lbl=a.labels||{}, ann=a.annotations||{}, st=a.status||{};
+    const ack=a.ack?`<div class="kv"><span>确认信息</span><span>${esc(a.ack.ack_by)} @ ${esc(a.ack.ack_time)}${a.ack.comment?'（'+esc(a.ack.comment)+'）':''}</span></div>`:'';
+    const runbook=safeUrl(ann.runbook_url)?`<div class="kv"><span>Runbook</span><span><a href="${esc(safeUrl(ann.runbook_url))}" target="_blank" rel="noopener">${esc(ann.runbook_url)}</a></span></div>`:'';
+    const extraLabels=Object.entries(lbl).filter(([k])=>!['alertname','instance','group','severity'].includes(k))
+      .map(([k,v])=>`<div class="kv"><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join('');
+    const extraAnn=Object.entries(ann).filter(([k])=>!['summary','description','runbook_url'].includes(k))
+      .map(([k,v])=>`<div class="kv"><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join('');
+    document.getElementById('detailBody').innerHTML=`
+      <div class="kv"><span>告警名</span><span>${esc(lbl.alertname)}</span></div>
+      <div class="kv"><span>实例</span><span>${esc(lbl.instance)}</span></div>
+      <div class="kv"><span>分组</span><span>${esc(lbl.group)}</span></div>
+      <div class="kv"><span>级别</span><span>${esc(lbl.severity)}</span></div>
+      <div class="kv"><span>开始时间</span><span>${new Date(a.startsAt).toLocaleString()}</span></div>
+      <div class="kv"><span>结束时间</span><span>${a.endsAt?new Date(a.endsAt).toLocaleString():'-'}</span></div>
+      <div class="kv"><span>状态</span><span>${esc(st.state||'')}${st.silencedBy&&st.silencedBy.length?'（已静默）':''}${st.inhibitedBy&&st.inhibitedBy.length?'（已抑制）':''}</span></div>
+      <div class="kv"><span>聚合指纹</span><span style="font-family:monospace;font-size:12px">${esc(a.fingerprint)}</span></div>
+      <div class="kv"><span>摘要</span><span>${esc(ann.summary||'')}</span></div>
+      <div class="kv"><span>描述</span><span>${esc(ann.description||'')}</span></div>
+      ${runbook}${ack}
+      <div class="detail-section">其他标签</div>
+      ${extraLabels||'<div class="kv"><span>-</span><span>无</span></div>'}
+      <div class="detail-section">其他注解</div>
+      ${extraAnn||'<div class="kv"><span>-</span><span>无</span></div>'}
+    `;
+  }catch(e){ toast('加载详情失败', true); }
+  openModal('detailModal');
+}
+
+async function toggleAck(fp){
+  const a = await api('/api/alert/'+fp);
+  if(a.error){ toast('获取告警失败', true); return; }
+  if(a.ack){
+    const r = await api('/api/ack/'+fp,{method:'DELETE'});
+    if(r.ok) toast('已取消确认'); else toast('操作失败', true);
+  }else{
+    const by=(prompt('确认人（默认 admin）')||'').trim()||'admin';
+    const comment=(prompt('备注（可选）')||'').trim();
+    const r = await api('/api/ack/'+fp,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({by, comment})});
+    if(r.ok) toast('已确认'); else toast('操作失败', true);
+  }
+  refresh();
+}
+
+/* ---------- 静默 ---------- */
+function fillGroupOptions(selected){
+  const sel=document.getElementById('sGroup');
+  const groups=new Set(currentData?currentData.groups.map(g=>g.group):[]);
+  if(selected) groups.add(selected);
+  const arr=['.*', ...[...groups].sort()];
+  sel.innerHTML=arr.map(g=>`<option value="${esc(g)}" ${g===selected?'selected':''}>${esc(g==='.*'?'全部':g)}</option>`).join('');
+}
+function openSilenceFor(group, alertname){
+  fillGroupOptions(group||'');
+  document.getElementById('sGroup').value=group||'.*';
+  document.getElementById('sAlertname').value=alertname||'';
+  document.getElementById('sRegex').checked=false;
+  openModal('silenceModal');
+}
+function openSilenceModal(){
+  fillGroupOptions();
+  document.getElementById('sGroup').value='.*';
+  document.getElementById('sAlertname').value='';
+  document.getElementById('sRegex').checked=false;
+  openModal('silenceModal');
+}
+
+async function submitSilence(){
+  const dur=parseInt(document.getElementById('sDur').value);
+  const groupVal=document.getElementById('sGroup').value;
+  const an=document.getElementById('sAlertname').value.trim();
+  const isRegexAn=document.getElementById('sRegex').checked;
+  if(groupVal==='.*' && !an){
+    if(!confirm('将静默匹配到的全部告警，确定继续？')) return;
+  }
+  const matchers=[{name:'group',value:groupVal,isRegex:groupVal==='.*'}];
+  if(an) matchers.push({name:'alertname',value:an,isRegex:isRegexAn});
+  const end=new Date(Date.now()+dur*1000);
+  try{
+    const r=await api('/api/silence',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({matchers, endsAt:end.toISOString().replace(/\.\d+Z$/,'.000Z'),
+        createdBy:document.getElementById('sCreator').value.trim()||'admin',
+        comment:document.getElementById('sComment').value.trim()||'web静默'})
+    });
+    if(r.silenceId){ toast('✅ 静默已创建'); closeModal(); refresh(); loadSilences(); }
+    else toast('创建失败：'+(r.message||JSON.stringify(r)), true);
+  }catch(e){ toast('创建失败：'+e, true); }
+}
+
+function openSilenceManage(){ openModal('silenceManageModal'); loadSilences(); }
+async function loadSilences(){
+  const wrap=document.getElementById('silenceList');
+  wrap.innerHTML='<div class="empty">加载中...</div>';
+  const r=await api('/api/silences?active=true');
+  if(r.error){ wrap.innerHTML='<div class="empty"><div class="big">⚠️</div>Alertmanager 不可达，无法加载静默</div>'; return; }
+  const silences=r.silences||[];
+  if(!silences.length){ wrap.innerHTML='<div class="empty"><div class="big">🔕</div>暂无活动静默</div>'; return; }
+  wrap.innerHTML=silences.map(s=>{
+    const matchers=(s.matchers||[]).map(m=>`${esc(m.name)}${m.isRegex?'~':'='}${esc(m.value)}`).join(' 且 ');
+    return `<div class="sil-row">
+      <div class="main">
+        <div><b>${matchers}</b></div>
+        <div class="small muted">${esc(s.comment||'')} · ${esc(s.createdBy||'')}</div>
+      </div>
+      <div class="time">剩余 ${remainText(s.endsAt)}<br><span class="small">至 ${new Date(s.endsAt).toLocaleString()}</span></div>
+      <button class="btn danger" data-action="del-silence" data-id="${esc(s.id)}">删除</button>
+    </div>`;
+  }).join('');
+}
+async function deleteSilence(id){
+  if(!confirm('确定删除该静默？')) return;
+  const r=await api('/api/silence/'+id,{method:'DELETE'});
+  if(r.ok){ toast('✅ 静默已删除'); loadSilences(); refresh(); }
+  else toast('删除失败：'+(r.message||'未知错误'), true);
+}
+function remainText(endsAt){
+  const ms=new Date(endsAt)-Date.now();
+  if(ms<=0) return '已过期';
+  const h=Math.floor(ms/3600000), m=Math.floor(ms%3600000/60000);
+  return h+'h '+m+'m';
+}
+
+/* ---------- 已恢复历史 ---------- */
+function openHistory(){ openModal('historyModal'); loadHistory(); }
+async function loadHistory(){
+  const wrap=document.getElementById('historyList');
+  wrap.innerHTML='<div class="empty">加载中...</div>';
+  const r=await api('/api/history?limit=100');
+  if(r.error || !r.history){ wrap.innerHTML='<div class="empty">加载失败</div>'; return; }
+  if(!r.history.length){ wrap.innerHTML='<div class="empty"><div class="big">✅</div>暂无恢复记录</div>'; return; }
+  wrap.innerHTML=r.history.map(h=>{
+    const sev=sevLabel(h.severity);
+    const dur=fmtDur(new Date(h.resolved_at)-new Date(h.starts_at));
+    return `<div class="hist-row">
+      <span class="sev-badge ${sev}">${sev.toUpperCase()}</span>
+      <div class="main"><b>${esc(h.alertname)}</b> <span class="small muted">${esc(h.instance)}</span></div>
+      <span class="small muted">${esc(h.group_name)}</span>
+      <span class="small muted" style="text-align:right">${new Date(h.resolved_at).toLocaleString()}${dur?' · 持续 '+dur:''}</span>
+    </div>`;
+  }).join('');
+}
+function fmtDur(ms){
+  if(!(ms>0)) return '';
+  const s=Math.floor(ms/1000), m=Math.floor(s/60), h=Math.floor(m/60);
+  if(h>=24) return Math.floor(h/24)+'天'+(h%24)+'h';
+  if(h>0) return h+'h '+(m%60)+'m';
+  if(m>0) return m+'m '+(s%60)+'s';
+  return s+'s';
+}
+
+/* ---------- 通知 ---------- */
+async function toggleNotif(){
+  if(!('Notification' in window)){ toast('当前浏览器不支持通知', true); return; }
+  if(Notification.permission==='default') await Notification.requestPermission();
+  notifEnabled = Notification.permission==='granted';
+  if(notifEnabled){ critInit=false; prevCrit.clear(); toast('通知已开启：新 critical 告警会弹窗提醒'); }
+  else toast('通知未授权', true);
+  document.getElementById('notifBtn').textContent = notifEnabled?'🔔 通知开':'🔕 通知';
+}
+function checkNewCriticals(data){
+  const crit=new Set();
+  data.groups.forEach(g=>g.items.forEach(it=>{
+    if(it.severity==='critical') it.alerts.forEach(a=>crit.add(a.fingerprint));
+  }));
+  if(!critInit){ critInit=true; prevCrit=crit; return; }
+  const fresh=[...crit].filter(fp=>!prevCrit.has(fp));
+  prevCrit=crit;
+  if(notifEnabled && fresh.length){
+    const first=(data.groups.flatMap(g=>g.items).find(it=>it.severity==='critical')||{}).alertname||'';
+    new Notification('⚠️ '+fresh.length+' 条新严重告警', {body: first?'如：'+first:''});
+  }
+}
+
+/* ---------- 通用 ---------- */
+function toggleAuto(){
+  autoRefresh=!autoRefresh;
+  document.getElementById('autoBtn').textContent=autoRefresh?'⏸ 暂停':'▶ 继续';
+  if(autoRefresh) startAuto(); else clearInterval(timer);
+}
+function startAuto(){ clearInterval(timer); timer=setInterval(refresh,15000); }
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(){ document.querySelectorAll('.modal').forEach(m=>m.classList.remove('show')); }
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('show'); }));
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden) clearInterval(timer);
+  else if(autoRefresh){ startAuto(); refresh(); }
+});
+document.getElementById('search').addEventListener('input', ()=>render(currentData));
+
+if('Notification' in window && Notification.permission==='granted') notifEnabled=true;
+refresh(); startAuto();
+</script>
+</body>
+</html>
