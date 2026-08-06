@@ -25,6 +25,28 @@ BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
 DB_PATH = Path(os.environ.get("ALERTBOARD_DB", str(BASE_DIR / "alertboard.db")))
 
+# ---- 服务名映射 (ip:port -> service_name, 数据来自 Jenkins 库经 sync_service_map.py 定时同步) ----
+_service_map = {}  # "ip:port" -> service_name
+
+
+def _load_service_map():
+    """从本库 alertboard.db 的 service_map 表加载映射(由 sync_service_map.py 定时同步)"""
+    global _service_map
+    try:
+        import sqlite3
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT instance, service_name FROM service_map").fetchall()
+        conn.close()
+        _service_map = {r["instance"]: r["service_name"] for r in rows}
+    except Exception:
+        _service_map = {}
+
+
+def _service_name_for(instance: str) -> str:
+    """根据 instance(ip:port) 返回服务名; 无则返回空"""
+    return _service_map.get(instance, "")
+
 MAX_SILENCE_DAYS = 90          # 单次静默最长时长(天)
 HISTORY_MAX = 500              # 最多保留的恢复记录条数
 HISTORY_RETENTION_DAYS = 7     # 恢复记录保留天数
@@ -113,10 +135,12 @@ def _trim_alert(a, ack_map=None):
     ann = a.get("annotations") or {}
     status = a.get("status") or {}
     fp = a.get("fingerprint", "")
+    instance = labels.get("instance") or ""
     return {
         "fingerprint": fp,
         "labels": labels,
         "annotations": ann,
+        "service_name": _service_name_for(instance),
         "startsAt": a.get("startsAt", ""),
         "endsAt": a.get("endsAt", ""),
         "status": {
@@ -242,16 +266,32 @@ async def _history_loop():
         await asyncio.sleep(HISTORY_POLL_INTERVAL)
 
 
+async def _service_refresh_loop():
+    while True:
+        await asyncio.sleep(300)  # 每5分钟重读一次 service_map(配合 sync_service_map.py)
+        try:
+            await asyncio.to_thread(_load_service_map)
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _init_db()
+    await asyncio.to_thread(_load_service_map)
     task = asyncio.create_task(_history_loop())
+    svc_task = asyncio.create_task(_service_refresh_loop())
     try:
         yield
     finally:
         task.cancel()
+        svc_task.cancel()
         try:
             await task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await svc_task
         except asyncio.CancelledError:
             pass
 
@@ -304,6 +344,8 @@ def alert_detail(fingerprint: str):
     for a in alerts:
         if a.get("fingerprint") == fingerprint:
             a["ack"] = ack_map.get(fingerprint)
+            inst = (a.get("labels") or {}).get("instance") or ""
+            a["service_name"] = _service_name_for(inst)
             return a
     raise HTTPException(404, "not found")
 

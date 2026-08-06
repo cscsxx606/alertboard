@@ -365,9 +365,11 @@ function instanceHTML(a){
   const ack=a.ack?`<span class="ack-tag">✓ ${esc(a.ack.ack_by)} 已确认</span>`:'';
   const sil=(a.status&&a.status.silencedBy&&a.status.silencedBy.length)?'<span class="ack-tag sil">🔕 已静默</span>':'';
   const inh=(a.status&&a.status.inhibitedBy&&a.status.inhibitedBy.length)?'<span class="ack-tag inh">🚫 已抑制</span>':'';
+  const svcNm=a.service_name||'';
+  const svcTxt = svcNm ? svcNm+' <span class="svc-port">('+esc(lbl.instance||'')+')</span>' : esc(lbl.instance||'(无实例)');
   return `
   <div class="instance-row">
-    <span class="alert-instance" data-action="detail" data-fp="${esc(a.fingerprint)}" title="点击看详情">${esc(lbl.instance||'(无实例)')}</span>
+    <span class="alert-instance" data-action="detail" data-fp="${esc(a.fingerprint)}" title="${esc(lbl.instance||'')}">${svcTxt}</span>
     <span class="alert-summary">${esc(ann.summary||'')}</span>
     ${sil}${inh}${ack}
     <span class="alert-time">${time}</span>
