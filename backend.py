@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
 DB_PATH = Path(os.environ.get("ALERTBOARD_DB", str(BASE_DIR / "alertboard.db")))
 
-# ---- 服务名映射 (ip:port -> service_name, 数据来自 Jenkins 库经 sync_service_map.py 定时同步) ----
+# ---- 服务名映射 (ip:port -> service_name, 数据来自 项目部署数据库经 sync_service_map.py 定时同步) ----
 _service_map = {}  # "ip:port" -> service_name
 
 

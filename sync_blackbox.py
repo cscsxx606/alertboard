@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""根据 Jenkins 库(op_platform)自动更新 blackbox_targets.json + service_map
-范围: 26台IP中排除CDH; Jenkins库服务 + ES中间件补充; 过滤辅助端口; 只留实际监听。
-cron 每天执行。密码从环境变量读。"""
+"""根据 项目部署数据库自动更新 blackbox_targets.json + service_map
+范围: 指定主机中排除大数据集群; 项目数据源库服务 + ES中间件补充; 过滤辅助端口; 只留实际监听。
+。密码从环境变量读。"""
 import json
 import os
 import sqlite3
@@ -11,23 +11,23 @@ from datetime import datetime
 
 # 需要监控的 IP (CDH 241/240/242 暂不监控, 已排除)
 TARGET_IPS = [
-    "172.21.195.169", "172.21.195.175", "172.21.195.171", "172.21.195.178",
-    "172.21.195.168", "172.21.195.166", "172.21.195.180", "172.21.195.179",
-    "172.21.195.177", "172.21.195.170", "172.21.195.165", "172.21.195.162",
-    "172.21.195.167", "172.21.195.176", "172.21.195.172", "172.21.195.173",
-    "172.21.195.164", "172.21.195.163", "172.21.195.174", "172.21.195.161",
-    "172.21.195.182", "172.21.195.181", "172.18.158.142",
+    "10.10.10.169", "10.10.10.175", "10.10.10.171", "10.10.10.178",
+    "10.10.10.168", "10.10.10.166", "10.10.10.180", "10.10.10.179",
+    "10.10.10.177", "10.10.10.170", "10.10.10.165", "10.10.10.162",
+    "10.10.10.167", "10.10.10.176", "10.10.10.172", "10.10.10.173",
+    "10.10.10.164", "10.10.10.163", "10.10.10.174", "10.10.10.161",
+    "10.10.10.182", "10.10.10.181", "10.10.12.142",
 ]
-# 中间件补充端口 (非 Jenkins 项目) - 只补 ES
+# 中间件补充端口 (非 项目数据源 项目) - 只补 ES
 EXTRA = {
-    "172.21.195.162": [9200, 9300],
-    "172.21.195.167": [9200, 9300],
-    "172.21.195.176": [9200, 9300],
+    "10.10.10.162": [9200, 9300],
+    "10.10.10.167": [9200, 9300],
+    "10.10.10.176": [9200, 9300],
 }
 DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
 DB_USER = os.environ.get("DB_USER", "root")
 DB_PASS = os.environ.get("DB_PASS", "")
-DB_NAME = os.environ.get("DB_NAME", "op_platform")
+DB_NAME = os.environ.get("DB_NAME", "deploy_db")
 BB_FILE = os.environ.get("BB_FILE", "/data/monitor/prometheus/blackbox_targets.json")
 ALERT_DB = os.environ.get("ALERTBOARD_DB", "/data/monitor/alertboard/alertboard.db")
 
@@ -53,7 +53,7 @@ def myconnect():
     return pymysql.connect(**conn_args)
 
 
-def query_jenkins():
+def query_db():
     conn = myconnect()
     cur = conn.cursor()
     ph = ",".join(["%s"] * len(TARGET_IPS))
@@ -83,13 +83,13 @@ def check_listen(ip):
 
 
 def main():
-    # 1. Jenkins 库
+    # 1. 项目部署数据库
     try:
-        rows = query_jenkins()
+        rows = query_db()
     except Exception as e:
-        print("读 Jenkins 库失败:", e)
+        print("读 项目部署数据库失败:", e)
         return
-    print("Jenkins 库端口(过滤辅助):", len(rows))
+    print("项目部署数据库端口(过滤辅助):", len(rows))
 
     # 2. 加中间件补充 (ES)
     for ip, ports in EXTRA.items():
@@ -112,7 +112,7 @@ def main():
             alive.append((name, ip, port, gl))
     print("实际监听端口:", len(alive))
 
-    groups = {"172.21.195.162": "es", "172.21.195.167": "es", "172.21.195.176": "es"}
+    groups = {"10.10.10.162": "es", "10.10.10.167": "es", "10.10.10.176": "es"}
     bb_groups = {}
     svc_map = {}
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
